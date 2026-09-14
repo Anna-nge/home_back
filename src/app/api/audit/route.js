@@ -1,7 +1,14 @@
+
 import { getClientPromise } from "@/lib/mongodb";
+
 import { isAdmin } from "@/lib/auth";
-import { errorResponse, printExceptionLog, successResponse } from "@/lib/utils";
 import corsHeaders from "@/lib/cors";
+
+import {
+  errorResponse,
+  printExceptionLog,
+  successResponse,
+} from "@/lib/utils";
 
 export async function OPTIONS() {
   return new Response(null, {
@@ -10,7 +17,6 @@ export async function OPTIONS() {
   });
 }
 
-// Admin-only: recent audit log entries, newest first.
 export async function GET(request) {
   if (!isAdmin(request)) {
     return errorResponse("Unauthorized Request", 403);
@@ -30,8 +36,6 @@ export async function GET(request) {
     return successResponse({ logs }, 200);
   } catch (error) {
     printExceptionLog("GET Audit Log", error);
-
-
     return errorResponse("GET Audit Log Internal Error", 500);
   }
 }

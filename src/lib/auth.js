@@ -1,49 +1,35 @@
-import jwt from "jsonwebtoken"; 
 
-import { X_HEADER_USER_ID } from "./constant"; 
+import jwt from "jsonwebtoken";
+import { X_HEADER_USER_ID } from "./constant";
 
- 
+const JWT_SECRET = process.env.JWT_SECRET;
 
-const JWT_SECRET = process.env.JWT_SECRET; 
+export function verifyJWT(request) {
+  try {
+    const token = request.cookies.get("token")?.value;
 
- 
+    if (!token || !JWT_SECRET) {
+      return null;
+    }
 
-export function verifyJWT(req) { 
+    return jwt.verify(token, JWT_SECRET);
+  } catch (error) {
+    console.log("==> Verify Token Exception");
+    console.log(error.message);
+    return null;
+  }
+}
 
-  try { 
+export function isAuthenticated(request) {
+  return verifyJWT(request) !== null;
+}
 
-    const token = req.cookies.get("token")?.value; 
+export function isAdmin(request) {
+  const user = verifyJWT(request);
 
-    if (!token) { 
+  if (!user) {
+    return false;
+  }
 
-      return null; 
-
-    } 
-
-    const decoded = jwt.verify(token, JWT_SECRET); 
-
-    return decoded; 
-
-  } catch (err) { 
-
-    console.log("==>Verify Token Exception"); 
-
-    console.log(err); 
-
-    return null; 
-
-  } 
-
-} 
-
- 
-
-export function isAdmin(request) { 
-
-  const headers = request.headers; 
-
-  const userId = Number(headers.get(X_HEADER_USER_ID)); 
-
-  return userId == -1; 
-
-} 
+  return String(user.id) === "-1";
+}

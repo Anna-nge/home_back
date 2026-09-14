@@ -1,10 +1,17 @@
+
 import { getClientPromise } from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
+import bcrypt from "bcrypt";
+
 import { isAdmin } from "@/lib/auth";
-import { errorResponse, printExceptionLog, successResponse } from "@/lib/utils";
 import { writeAuditLog } from "@/lib/audit";
 import corsHeaders from "@/lib/cors";
-import bcrypt from "bcrypt";
-import { ObjectId } from "mongodb";
+
+import {
+  errorResponse,
+  printExceptionLog,
+  successResponse,
+} from "@/lib/utils";
 
 export async function OPTIONS() {
   return new Response(null, {
@@ -13,7 +20,6 @@ export async function OPTIONS() {
   });
 }
 
-// Admin-only: set a new password for the given user.
 export async function PUT(request, { params }) {
   if (!isAdmin(request)) {
     return errorResponse("Unauthorized Request", 403);
@@ -21,33 +27,30 @@ export async function PUT(request, { params }) {
 
   const { user_id } = await params;
 
+  if (!ObjectId.isValid(user_id)) {
+    return errorResponse("Invalid user id", 400);
+  }
+
   try {
     const data = await request.json();
-    const newPassword = data.newPassword;
+    const newPassword = String(data.newPassword || "");
 
-    if (!newPassword || String(newPassword).length < 8) {
+    if (newPassword.length < 8) {
       return errorResponse(
         "Password must be at least 8 characters",
         400
       );
-
-    }
-
-    let objectId;
-    try {
-      objectId = new ObjectId(user_id);
-    } catch {
-      return errorResponse("Invalid user id", 400);
     }
 
     const client = await getClientPromise();
     const db = client.db(process.env.DB_NAME);
 
-    const hashed = await bcrypt.hash(newPassword, 12);
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    const updateResult = await db
-      .collection("user")
-      .updateOne({ _id: objectId }, { $set: { password: hashed } });
+    const updateResult = await db.collection("user").updateOne(
+      { _id: new ObjectId(user_id) },
+      { $set: { password: hashedPassword } }
+    );
 
     if (updateResult.matchedCount === 0) {
       return errorResponse("User not found", 404);
@@ -63,10 +66,8 @@ export async function PUT(request, { params }) {
       { message: "Password updated successfully" },
       200
     );
-
   } catch (error) {
     printExceptionLog("PUT User Password Exception", error);
-
     return errorResponse("PUT User Password Internal Error", 500);
   }
 }
