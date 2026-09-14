@@ -1,8 +1,15 @@
 import { getClientPromise } from "@/lib/mongodb";
-
 import { errorResponse, printExceptionLog, successResponse } from "@/lib/utils";
-
+import { writeAuditLog } from "@/lib/audit";
+import corsHeaders from "@/lib/cors";
 import { ObjectId } from "mongodb";
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+}
 
 export async function GET(request, { params }) {
   const { item_id } = await params;
@@ -13,9 +20,7 @@ export async function GET(request, { params }) {
     const db = client.db(process.env.DB_NAME);
 
     const item = await db
-
       .collection("item")
-
       .findOne({ _id: new ObjectId(item_id) });
 
     if (item) {
@@ -23,9 +28,9 @@ export async function GET(request, { params }) {
         {
           item,
         },
-
         201
       );
+
     } else return errorResponse("Item not found", 404);
   } catch (error) {
     printExceptionLog("GET Item Exception", error);
@@ -43,15 +48,22 @@ export async function DELETE(request, { params }) {
     const db = client.db(process.env.DB_NAME);
 
     const deleteResult = await db
-  .collection("item")
-  .updateOne(
-    { _id: new ObjectId(item_id) },
-    {
-      $set: {
-        status: "DELETED",
-      },
-    }
-  );
+      .collection("item")
+      .updateOne(
+        { _id: new ObjectId(item_id) },
+        {
+          $set: {
+            status: "DELETED",
+          },
+        }
+      );
+
+    await writeAuditLog(request, {
+      action: "ITEM_DELETE",
+      entity: "item",
+      entityId: item_id,
+    });
+
 
     return successResponse({ message: "Delete Success" }, 201);
   } catch (error) {
@@ -74,9 +86,7 @@ export async function PUT(request, { params }) {
     const db = client.db(process.env.DB_NAME);
 
     const storedItem = await db
-
       .collection("item")
-
       .findOne({ _id: new ObjectId(item_id) });
 
     if (storedItem) {
@@ -86,21 +96,32 @@ export async function PUT(request, { params }) {
 
       storedItem.amount = data.amount;
 
+
       storedItem.category = data.category;
 
       const updatedResult = await db
-
         .collection("item")
-
         .updateOne({ _id: new ObjectId(item_id) }, { $set: storedItem });
 
       console.log("==>update result: ", updatedResult);
 
       const updateOk = Number(updatedResult.modifiedCount) > 0;
 
-      if (updateOk)
+      if (updateOk) {
+        await writeAuditLog(request, {
+          action: "ITEM_UPDATE",
+          entity: "item",
+          entityId: item_id,
+          details: {
+            name: data.name,
+            price: data.price,
+            amount: data.amount,
+            category: data.category,
+          },
+        });
+
         return successResponse({ message: "Item update success" }, 201);
-      else return errorResponse({ message: "Item update failed" }, 400);
+      } else return errorResponse({ message: "Item update failed" }, 400);
     } else {
       return errorResponse({ message: "Item not found" }, 400);
     }
@@ -108,5 +129,6 @@ export async function PUT(request, { params }) {
     printExceptionLog("PUT Item Exception", error);
 
     return errorResponse("PUT Item Internal Error", 500);
+
   }
 }
